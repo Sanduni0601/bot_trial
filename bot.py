@@ -153,7 +153,7 @@ def check_range_alert():
     ema20 = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
     direction = 1 if ema20.iloc[-1] > ema20.iloc[-5] else -1
 
-    predicted = price_now + slope + direction*vol_factor
+    predicted = price_now + slope + direction*vol_factor - 40
 
     if predicted >= price_now + RANGE:
         return "BET-UP", price_now
