@@ -83,8 +83,8 @@ def get_klines():
         prices = data["prices"]  # [timestamp, price]
         df = pd.DataFrame(prices, columns=["time", "price"])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
-        # Resample to 15-min OHLC
-        df = df.set_index("time").resample("15T").ohlc()
+        # Fixed frequency string here
+        df = df.set_index("time").resample("15min").ohlc()
         df.columns = df.columns.droplevel(0)
         df = df.reset_index()
         df["volume"] = 0  # placeholder
@@ -92,7 +92,6 @@ def get_klines():
     except Exception as e:
         print("CoinGecko error:", e)
         return None
-
 # ---------------------------
 # Alert Logic
 # ---------------------------
