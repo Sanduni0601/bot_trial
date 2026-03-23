@@ -5,6 +5,8 @@ import datetime
 import json
 import requests
 import os
+import pandas as pd
+import ta
 
 STATE_FILE = "state.json"
 
@@ -14,6 +16,7 @@ STATE_FILE = "state.json"
 TOKEN = "8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"
 CHAT_ID = "8006267074"
 SYMBOL = "BTCUSD-P"
+RANGE = 330  # Price movement threshold for alerts
 
 alerts_list = []
 last_price = 0.0
@@ -57,7 +60,71 @@ def send_telegram(message):
         print("Telegram error:", e)
 
 # ---------------------------
-# Flask app
+# Fetch OHLC for range calculation
+# ---------------------------
+def get_ohlc():
+    try:
+        # Example: KuCoin BTCUSD-P 15min candles
+        url = f"https://api.kucoin.com/api/v1/market/candles?type=15min&symbol={SYMBOL}"
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            print("KuCoin error:", response.text)
+            return None
+
+        data = response.json()
+        if "data" not in data:
+            print("Invalid response:", data)
+            return None
+
+        candles = data["data"]
+        df = pd.DataFrame(candles, columns=[
+            "time", "open", "close", "high", "low", "volume", "turnover"
+        ])
+        # Convert types
+        for col in ["open","close","high","low"]:
+            df[col] = df[col].astype(float)
+        df = df.iloc[::-1].reset_index(drop=True)
+        return df
+    except Exception as e:
+        print("Fetch OHLC error:", e)
+        return None
+
+# ---------------------------
+# Range-based Alert Logic
+# ---------------------------
+def check_range_alert():
+    global last_price
+    df = get_ohlc()
+    if df is None or len(df) < 20:
+        return "NONE", last_price
+
+    price_now = df["close"].iloc[-1]
+    price_60min_ago = df["close"].iloc[-5]
+    slope_per_15min = (price_now - price_60min_ago) / 4
+
+    atr = ta.volatility.AverageTrueRange(
+        high=df["high"],
+        low=df["low"],
+        close=df["close"],
+        window=14
+    ).average_true_range().iloc[-1]
+    vol_factor = atr * 0.5
+
+    ema20 = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
+    direction = 1 if ema20.iloc[-1] > ema20.iloc[-5] else -1
+
+    # Predicted price (with -40 adjustment)
+    predicted = price_now + slope_per_15min + direction * vol_factor
+
+    if predicted >= price_now + RANGE:
+        return "BET-UP", price_now
+    elif predicted <= price_now - RANGE:
+        return "BET-DOWN", price_now
+    else:
+        return "NONE", price_now
+
+# ---------------------------
+# Flask Dashboard
 # ---------------------------
 app = Flask(__name__)
 
@@ -91,12 +158,13 @@ def tradingview_webhook():
     last_price = price
     last_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Telegram message
     if action == "BUY":
-        msg = f"📈 UP | {symbol} | {price}"
+        msg = f"📈 TRADINGVIEW UP | {symbol} | {price}"
     elif action == "SELL":
-        msg = f"📉 DOWN | {symbol} | {price}"
+        msg = f"📉 TRADINGVIEW DOWN | {symbol} | {price}"
     else:
-        msg = f"⏸ NO SIGNAL | {symbol} | {price}"
+        msg = f"⏸ TRADINGVIEW NO SIGNAL | {symbol} | {price}"
 
     print(msg)
     send_telegram(msg)
@@ -109,23 +177,43 @@ def tradingview_webhook():
     return "ok", 200
 
 # ---------------------------
-# Run Flask
+# Range Bot Loop
 # ---------------------------
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+def run_range_bot():
+    global last_price, last_time, alerts_list
+    last_status = None
 
-# ---------------------------
-# Bot loop (optional for local testing)
-# ---------------------------
-def run_bot():
     while True:
-        # This loop does nothing; all signals come via TradingView webhook
-        time.sleep(60)
+        try:
+            status, price = check_range_alert()
+            last_price = price
+            last_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            if status != last_status:
+                if status == "BET-UP":
+                    msg = f"📈 RANGE UP | {SYMBOL} | {price}"
+                elif status == "BET-DOWN":
+                    msg = f"📉 RANGE DOWN | {SYMBOL} | {price}"
+                else:
+                    msg = f"⏸ RANGE NO SIGNAL | {SYMBOL} | {price}"
+
+                print(msg)
+                send_telegram(msg)
+
+                alerts_list.append(msg)
+                if len(alerts_list) > 50:
+                    alerts_list = alerts_list[-50:]
+                save_state()
+                last_status = status
+
+            time.sleep(30)
+        except Exception as e:
+            print("Range bot error:", e)
+            time.sleep(60)
 
 # ---------------------------
 # Start Services
 # ---------------------------
 if __name__ == "__main__":
     Thread(target=run_flask).start()
-    Thread(target=run_bot).start()
+    Thread(target=run_range_bot).start()
