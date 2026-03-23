@@ -15,7 +15,7 @@ STATE_FILE = "state.json"
 # ---------------------------
 TOKEN = "8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"
 CHAT_ID = "8006267074"
-SYMBOL = "BTCUSDT.P"
+SYMBOL = "BTC-USDT"
 RANGE = 330  # Range threshold
 
 alerts_list = []
