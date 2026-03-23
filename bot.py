@@ -129,7 +129,7 @@ def check_alerts():
     direction = 1 if ema20.iloc[-1] > ema20.iloc[-5] else -1
 
     # Predicted price (reduce 40 from normal prediction)
-    p1 = priceNow + slopePer15Min + direction * volFactor - 80
+    p1 = priceNow + slopePer15Min + direction * volFactor - 120
 
     # Alert logic
     if p1 >= priceNow + RANGE:
