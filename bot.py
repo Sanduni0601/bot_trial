@@ -86,8 +86,7 @@ def get_binance_klines():
 
     try:
 
-        url = f"https://api.binance.com/api/v3/klines?symbol={SYMBOL}&interval=15m&limit=200"
-
+        url = "https://api.kucoin.com/api/v1/market/candles?type=15min&symbol=BTC-USDT"
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -185,7 +184,7 @@ def home():
 
 def run_flask():
 
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
 
     app.run(host="0.0.0.0", port=port)
 
