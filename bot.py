@@ -13,7 +13,7 @@ STATE_FILE = "state.json"
 # ---------------------------
 # Config
 # ---------------------------
-TOKEN = "8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"  # Replace with your Telegram bot token
+TOKEN ="8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"   # Replace with your Telegram bot token
 CHAT_ID = "8006267074"       # Replace with your chat ID
 SYMBOL = "bitcoin"              # CoinGecko ID for BTC
 VS_CURRENCY = "usd"
@@ -36,7 +36,6 @@ def save_state():
             }, f)
     except Exception as e:
         print("State save error:", e)
-
 
 def load_state():
     global last_price, last_time, alerts_list
@@ -66,11 +65,11 @@ def send_telegram(message):
 # ---------------------------
 def get_klines():
     """
-    Fetch 15m OHLC candles from CoinGecko for the last 1 day
+    Fetch 1-day BTC prices from CoinGecko and convert to 15-min OHLC
     """
     try:
         url = f"https://api.coingecko.com/api/v3/coins/{SYMBOL}/market_chart"
-        params = {"vs_currency": VS_CURRENCY, "days": "1", "interval": "minute"}
+        params = {"vs_currency": VS_CURRENCY, "days": "1"}
         response = requests.get(url, params=params, timeout=10)
         if response.status_code != 200:
             print("CoinGecko API error:", response.text)
@@ -84,10 +83,11 @@ def get_klines():
         prices = data["prices"]  # [timestamp, price]
         df = pd.DataFrame(prices, columns=["time", "price"])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
+        # Resample to 15-min OHLC
         df = df.set_index("time").resample("15T").ohlc()
-        df.columns = df.columns.droplevel(0)  # flatten
+        df.columns = df.columns.droplevel(0)
         df = df.reset_index()
-        df["volume"] = 0  # placeholder for volume (optional)
+        df["volume"] = 0  # placeholder
         return df
     except Exception as e:
         print("CoinGecko error:", e)
