@@ -110,6 +110,7 @@ def check_alerts():
     if df is None or len(df) < 20:
         return "NONE", last_price
 
+    # Latest actual close price
     priceNow = df["close"].iloc[-1]
     price60minAgo = df["close"].iloc[-5]
 
@@ -125,18 +126,18 @@ def check_alerts():
     volFactor = atr * 0.5
 
     ema20 = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
-
     direction = 1 if ema20.iloc[-1] > ema20.iloc[-5] else -1
 
-    p1 = priceNow + slopePer15Min + direction * volFactor
+    # Predicted price (reduce 40 from normal prediction)
+    p1 = priceNow + slopePer15Min + direction * volFactor - 40
 
+    # Alert logic
     if p1 >= priceNow + RANGE:
         return "BET-UP", priceNow
     elif p1 <= priceNow - RANGE:
         return "BET-DOWN", priceNow
 
     return "NONE", priceNow
-
 # ---------------------------
 # Flask Dashboard
 # ---------------------------
