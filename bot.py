@@ -15,7 +15,7 @@ STATE_FILE = "state.json"
 # ---------------------------
 TOKEN = "8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"
 CHAT_ID = "8006267074"
-SYMBOL = "BTC-USDT"
+SYMBOL = "BTCUSDT"
 RANGE = 330
 
 alerts_list = []
@@ -64,39 +64,40 @@ def send_telegram(message):
 # KuCoin Data Fetch (FIXED)
 # ---------------------------
 def get_klines():
+    """
+    Fetch 15m candles from Bybit (BTCUSDT)
+    """
     try:
-        url = f"https://api.kucoin.com/api/v1/market/candles?type=15min&symbol={SYMBOL}"
+        url = "https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=15&limit=200"
         response = requests.get(url, timeout=10)
-
         if response.status_code != 200:
-            print("KuCoin error:", response.text)
+            print("Bybit API error:", response.text)
             return None
 
         data = response.json()
 
-        if "data" not in data:
+        # Check structure
+        if "result" not in data or "list" not in data["result"]["BTCUSDT"]:
             print("Invalid response:", data)
             return None
 
-        candles = data["data"]
+        candles = data["result"]["BTCUSDT"]["list"]
 
+        # Convert to DataFrame
         df = pd.DataFrame(candles, columns=[
-            "time", "open", "close", "high", "low", "volume", "turnover"
+            "time", "open", "high", "low", "close", "volume", "turnover", "confirm", "ignore"
         ])
 
-        # Convert types
+        # Convert floats
         df["open"] = df["open"].astype(float)
-        df["close"] = df["close"].astype(float)
         df["high"] = df["high"].astype(float)
         df["low"] = df["low"].astype(float)
-
-        # Reverse order (important)
-        df = df.iloc[::-1].reset_index(drop=True)
+        df["close"] = df["close"].astype(float)
 
         return df
 
     except Exception as e:
-        print("Fetch error:", e)
+        print("Error fetching Bybit data:", e)
         return None
 
 # ---------------------------
