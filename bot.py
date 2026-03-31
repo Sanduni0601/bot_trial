@@ -16,7 +16,7 @@ STATE_FILE = "state.json"
 TOKEN = "8689386667:AAFhazRA-tWJK4_h5q7mlTNp5Z0J_gviGYk"
 CHAT_ID = "8006267074"
 SYMBOL = "BTC-USDT"
-RANGE = 300
+RANGE = 300  # price range threshold
 
 alerts_list = []
 prediction_history = []
@@ -117,11 +117,10 @@ def check_range_alert():
     if df is None or len(df) < 20:
         return "NONE", last_price
 
-    price_now = df["close"].iloc[-1] - 200
-    price_30min_ago = df["close"].iloc[-5] - 200
+    price_now = df["close"].iloc[-1]
+    price_30min_ago = df["close"].iloc[-3]  # 2 candles back = 30 minutes
 
-    slope_per_candle = (price_now - price_30min_ago) / 2
-    slope = slope_per_candle * 5  # 75 mins
+    slope = price_now - price_30min_ago  # slope for last 30 min
 
     atr = ta.volatility.AverageTrueRange(
         high=df["high"], low=df["low"], close=df["close"], window=14
@@ -155,7 +154,7 @@ def check_prediction_accuracy():
             continue
 
         time_diff = (datetime.datetime.now() - datetime.datetime.fromisoformat(p["time"])).total_seconds()
-        if time_diff >= 4500:  # 75 mins
+        if time_diff >= 1800:  # 30 mins after prediction
             entry = p["price"]
 
             if p["prediction"] == "BET-UP":
@@ -224,7 +223,7 @@ def run_range_bot():
                     alerts_list = alerts_list[-50:]
 
                 save_state()
-                last_status = status  # <-- update last_status here
+                last_status = status  # update last_status
 
             # ✅ Check prediction results
             check_prediction_accuracy()
