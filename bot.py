@@ -108,9 +108,9 @@ def get_ohlc():
 
     except:
         return None
----------------------------
-TradingView Webhook
----------------------------
+#---------------------------
+#TradingView Webhook
+#---------------------------
 @app.route("/tv-webhook", methods=["POST"])
 def tradingview_webhook():
     global last_price, last_time, alerts_list
