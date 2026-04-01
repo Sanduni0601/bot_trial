@@ -108,40 +108,41 @@ def get_ohlc():
 
     except:
         return None
+
 #---------------------------
 #TradingView Webhook
 #---------------------------
-@app.route("/tv-webhook", methods=["POST"])
-def tradingview_webhook():
-    global last_price, last_time, alerts_list
+# @app.route("/tv-webhook", methods=["POST"])
+# def tradingview_webhook():
+#     global last_price, last_time, alerts_list
 
-    data = request.json
-    if not data:
-        return "No data received", 400
+#     data = request.json
+#     if not data:
+#         return "No data received", 400
 
-    action = data.get("action")
-    price = data.get("price", 0.0)
-    symbol = data.get("symbol", SYMBOL)
+#     action = data.get("action")
+#     price = data.get("price", 0.0)
+#     symbol = data.get("symbol", SYMBOL)
 
-    last_price = price
-    last_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#     last_price = price
+#     last_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    if action == "BUY":
-        msg = f"📈 TRADINGVIEW UP | {symbol} | {price}"
-    elif action == "SELL":
-        msg = f"📉 TRADINGVIEW DOWN | {symbol} | {price}"
-    else:
-        msg = f"⏸ TRADINGVIEW NO SIGNAL | {symbol} | {price}"
+#     if action == "BUY":
+#         msg = f"📈 TRADINGVIEW UP | {symbol} | {price}"
+#     elif action == "SELL":
+#         msg = f"📉 TRADINGVIEW DOWN | {symbol} | {price}"
+#     else:
+#         msg = f"⏸ TRADINGVIEW NO SIGNAL | {symbol} | {price}"
 
-    print(msg)
-    send_telegram(msg)
+#     print(msg)
+#     send_telegram(msg)
 
-    alerts_list.append(msg)
-    if len(alerts_list) > 50:
-        alerts_list = alerts_list[-50:]
+#     alerts_list.append(msg)
+#     if len(alerts_list) > 50:
+#         alerts_list = alerts_list[-50:]
 
-    save_state()
-    return "ok", 200
+#     save_state()
+#     return "ok", 200
 
 # ---------------------------
 # Prediction Logic
@@ -152,9 +153,9 @@ def check_range_alert():
         return "NONE", last_price
 
     price_now = df["close"].iloc[-1]
-    price_30min_ago = df["close"].iloc[-3]  # 2 candles back = 30 minutes
+    price_30min_ago = df["close"].iloc[-3]
 
-    slope = price_now - price_30min_ago  # slope for last 30 min
+    slope = (price_now - price_30min_ago)/2
 
     atr = ta.volatility.AverageTrueRange(
         high=df["high"], low=df["low"], close=df["close"], window=14
@@ -174,36 +175,42 @@ def check_range_alert():
         return "NONE", price_now
 
 # ---------------------------
-# Accuracy Check
+# ✅ FIXED Accuracy Check
 # ---------------------------
 def check_prediction_accuracy():
     global prediction_history
+
     df = get_ohlc()
     if df is None:
         return
-    current_price = df["close"].iloc[-1]
 
     for p in prediction_history:
         if p.get("checked"):
             continue
 
-        time_diff = (datetime.datetime.now() - datetime.datetime.fromisoformat(p["time"])).total_seconds()
-        if time_diff >= 1800:  # 30 mins after prediction
-            entry = p["price"]
+        entry_index = p.get("index")
 
-            if p["prediction"] == "BET-UP":
-                result = "WIN" if current_price > entry else "LOSS"
-            elif p["prediction"] == "BET-DOWN":
-                result = "WIN" if current_price < entry else "LOSS"
-            else:
-                result = "SKIP"
+        if entry_index is None or len(df) <= entry_index + 1:
+            continue
 
-            msg = f"📊 RESULT | {p['prediction']} | Entry: {entry} | Now: {current_price} | {result}"
-            print(msg)
-            send_telegram(msg)
+        next_candle = df.iloc[entry_index + 1]
+        entry_price = p["price"]
 
-            p["checked"] = True
-            p["result"] = result
+        if p["prediction"] == "BET-UP":
+            result = "WIN" if next_candle["high"] >= entry_price + RANGE else "LOSS"
+
+        elif p["prediction"] == "BET-DOWN":
+            result = "WIN" if next_candle["low"] <= entry_price - RANGE else "LOSS"
+
+        else:
+            result = "SKIP"
+
+        msg = f"📊 RESULT | {p['prediction']} | Entry: {entry_price} | High: {next_candle['high']} | Low: {next_candle['low']} | {result}"
+        print(msg)
+        send_telegram(msg)
+
+        p["checked"] = True
+        p["result"] = result
 
 # ---------------------------
 # Accuracy %
@@ -227,11 +234,15 @@ def run_range_bot():
 
     while True:
         try:
+            df = get_ohlc()
+            if df is None:
+                time.sleep(30)
+                continue
+
             status, price = check_range_alert()
             last_price = price
             last_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # ✅ Only send alert if status changes
             if status != last_status:
                 if status == "BET-UP":
                     msg = f"📈 RANGE UP | {SYMBOL} | {price}"
@@ -250,6 +261,7 @@ def run_range_bot():
                         "time": datetime.datetime.now().isoformat(),
                         "price": price,
                         "prediction": status,
+                        "index": len(df) - 1,  # ✅ FIX
                         "checked": False
                     })
 
@@ -257,9 +269,8 @@ def run_range_bot():
                     alerts_list = alerts_list[-50:]
 
                 save_state()
-                last_status = status  # update last_status
+                last_status = status
 
-            # ✅ Check prediction results
             check_prediction_accuracy()
             time.sleep(30)
 
